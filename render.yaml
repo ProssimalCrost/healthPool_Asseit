@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: healthpool-asseit
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    region: virginia
+    plan: free
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "5000"
+      # Pedidos pelo Render na hora de criar o Blueprint (nao ficam no arquivo):
+      - key: DATABASE_URL
+        sync: false
+      - key: ACCESS_KEY
+        sync: false

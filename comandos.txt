@@ -1,0 +1,3 @@
+cd C:\Users\asseit.SESI\Documents\healthPool_Asseit
+docker compose up -d --build
+docker compose exec app cat /data/access-key   # mostra o código de acesso

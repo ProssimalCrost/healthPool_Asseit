@@ -1,0 +1,77 @@
+// healthPool Asseit: versão interna, sem contas.
+//
+// Pode usar o MESMO servidor PostgreSQL do healthPool original, em um schema separado.
+// O schema vem da DATABASE_URL (?schema=asseit), então as tabelas daqui
+// (pools, measurements...) nunca se misturam com as do original (schema public).
+
+generator client {
+  provider = "prisma-client-js"
+  // debian-openssl-3.0.x = imagem node:*-slim do Dockerfile
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Pool {
+  id           String   @id @default(uuid())
+  name         String
+  volumeLiters Int?     @map("volume_liters")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  parameters   PoolParameter[]
+  measurements Measurement[]
+
+  @@map("pools")
+}
+
+/// Parâmetro medido (pH, cloro...).
+/// systemKey preenchido = parâmetro padrão (criado pelo servidor, não editável pelo app).
+/// systemKey nulo = parâmetro criado pela equipe.
+model ParameterDefinition {
+  id               String   @id @default(uuid())
+  systemKey        String?  @unique @map("system_key")
+  name             String   @unique
+  unit             String   @default("")
+  minValue         Float?   @map("min_value")
+  maxValue         Float?   @map("max_value")
+  enabledByDefault Boolean  @default(false) @map("enabled_by_default")
+  sortOrder        Int      @default(0) @map("sort_order")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  poolParameters PoolParameter[]
+  measurements   Measurement[]
+
+  @@map("parameter_definitions")
+}
+
+/// Quais parâmetros cada piscina acompanha.
+model PoolParameter {
+  poolId      String              @map("pool_id")
+  pool        Pool                @relation(fields: [poolId], references: [id], onDelete: Cascade)
+  parameterId String              @map("parameter_id")
+  parameter   ParameterDefinition @relation(fields: [parameterId], references: [id], onDelete: Cascade)
+  createdAt   DateTime            @default(now()) @map("created_at")
+
+  @@id([poolId, parameterId])
+  @@index([parameterId])
+  @@map("pool_parameters")
+}
+
+model Measurement {
+  id          String              @id @default(uuid())
+  poolId      String              @map("pool_id")
+  pool        Pool                @relation(fields: [poolId], references: [id], onDelete: Cascade)
+  parameterId String              @map("parameter_id")
+  parameter   ParameterDefinition @relation(fields: [parameterId], references: [id], onDelete: Cascade)
+  value       Float
+  measuredAt  DateTime            @map("measured_at")
+  createdAt   DateTime            @default(now()) @map("created_at")
+
+  @@index([poolId, parameterId, measuredAt(sort: Desc)])
+  @@map("measurements")
+}

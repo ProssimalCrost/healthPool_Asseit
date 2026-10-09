@@ -1,21 +1,22 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { createMeasurements } from '../api/measurements';
 import { queryKeys } from '../api/queryKeys';
-import type { ReadingInput } from '../api/types';
+import type { ProductUseInput, ReadingInput } from '../api/types';
 import { Button } from '../components/Button';
+import { Chip } from '../components/Chip';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { Loading } from '../components/Loading';
 import { Screen } from '../components/Screen';
 import { StatusChip } from '../components/StatusChip';
 import { Text } from '../components/Text';
 import { TextField } from '../components/TextField';
-import { usePool } from '../hooks/useWater';
+import { usePool, useProducts } from '../hooks/useWater';
 import type { AppStackParamList } from '../navigation/types';
 import { getErrorMessage } from '../utils/apiError';
-import { parseDecimal } from '../utils/numbers';
+import { formatValue, parseDecimal } from '../utils/numbers';
 import { describeRange, describeStatus, evaluateStatus } from '../utils/status';
 
 type Props = NativeStackScreenProps<AppStackParamList, 'MeasurementForm'>;
@@ -26,12 +27,17 @@ export function MeasurementFormScreen({ navigation, route }: Props) {
   const { data: pool, isPending, error, refetch } = usePool(poolId);
   const [values, setValues] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
+  const { data: products = [] } = useProducts();
+  // Produtos usados nesta ida: id do produto -> quantidade digitada.
+  const [used, setUsed] = useState<Record<string, string>>({});
 
   const save = useMutation({
-    mutationFn: (readings: ReadingInput[]) => createMeasurements(poolId, readings),
+    mutationFn: (input: { readings: ReadingInput[]; products: ProductUseInput[] }) =>
+      createMeasurements(poolId, input.readings, input.products),
     onSuccess: async () => {
-      // Atualiza o cartão da piscina, a lista e os históricos.
+      // Atualiza o cartão da piscina, a lista, os históricos e o estoque.
       await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.products }),
         queryClient.invalidateQueries({ queryKey: queryKeys.pools }),
         queryClient.invalidateQueries({ queryKey: queryKeys.measurements }),
       ]);
@@ -55,10 +61,23 @@ export function MeasurementFormScreen({ navigation, route }: Props) {
   const hasInvalid = parsed.some(({ value }) => value !== null && Number.isNaN(value));
   const filled = parsed.filter(({ value }) => value !== null && !Number.isNaN(value));
 
+  const parsedUsed = Object.entries(used).map(([productId, text]) => ({ productId, quantity: parseDecimal(text) }));
+  const hasInvalidUsed = parsedUsed.some(({ quantity }) => quantity === null || Number.isNaN(quantity) || quantity <= 0);
+
+  function toggleProduct(productId: string) {
+    setUsed((previous) => {
+      const { [productId]: removed, ...rest } = previous;
+      return removed === undefined ? { ...previous, [productId]: '' } : rest;
+    });
+  }
+
   function handleSave() {
     setSubmitted(true);
-    if (hasInvalid || filled.length === 0) return;
-    save.mutate(filled.map(({ parameter, value }) => ({ parameterId: parameter.id, value: value as number })));
+    if (hasInvalid || hasInvalidUsed || filled.length === 0) return;
+    save.mutate({
+      readings: filled.map(({ parameter, value }) => ({ parameterId: parameter.id, value: value as number })),
+      products: parsedUsed.map(({ productId, quantity }) => ({ productId, quantity: quantity as number })),
+    });
   }
 
   return (
@@ -89,6 +108,47 @@ export function MeasurementFormScreen({ navigation, route }: Props) {
             </View>
           );
         })}
+      </View>
+
+      <View className="gap-3">
+        <Text variant="heading">Produtos usados (opcional)</Text>
+        {products.length === 0 ? (
+          <Text variant="small">Cadastre produtos no estoque para registrar o que foi aplicado.</Text>
+        ) : (
+          <>
+            <Text variant="small">
+              Toque nos produtos aplicados na piscina. Eles saem do estoque e ficam salvos com a data desta medição.
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} className="grow-0" contentContainerClassName="gap-2">
+              {products.map((product) => (
+                <Chip
+                  key={product.id}
+                  label={product.name}
+                  selected={used[product.id] !== undefined}
+                  onPress={() => toggleProduct(product.id)}
+                />
+              ))}
+            </ScrollView>
+            {products
+              .filter((product) => used[product.id] !== undefined)
+              .map((product) => {
+                const quantity = parseDecimal(used[product.id] ?? '');
+                const invalid = submitted && (quantity === null || Number.isNaN(quantity) || quantity <= 0);
+                return (
+                  <TextField
+                    key={product.id}
+                    label={`${product.name}: quantidade usada`}
+                    value={used[product.id] ?? ''}
+                    onChangeText={(text) => setUsed((previous) => ({ ...previous, [product.id]: text }))}
+                    keyboardType="decimal-pad"
+                    suffix={product.unit}
+                    error={invalid ? 'Digite a quantidade usada, como 0,5.' : undefined}
+                    hint={`Em estoque: ${formatValue(product.quantity, product.unit)}`}
+                  />
+                );
+              })}
+          </>
+        )}
       </View>
 
       <Button

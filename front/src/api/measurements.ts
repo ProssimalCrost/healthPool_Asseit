@@ -1,9 +1,13 @@
 import { api } from './client';
-import type { Measurement, MeasurementPage, ReadingInput } from './types';
+import type { Measurement, MeasurementPage, ProductUseInput, ReadingInput } from './types';
 
-export async function createMeasurements(poolId: string, readings: ReadingInput[]): Promise<Measurement[]> {
-  // Sem measuredAt: o servidor usa o momento do envio.
-  const { data } = await api.post<Measurement[]>('/measurements', { poolId, readings });
+export async function createMeasurements(
+  poolId: string,
+  readings: ReadingInput[],
+  products: ProductUseInput[] = [],
+): Promise<Measurement[]> {
+  // Sem measuredAt: o servidor usa o momento do envio, e os produtos ficam com a mesma data.
+  const { data } = await api.post<Measurement[]>('/measurements', { poolId, readings, products });
   return data;
 }
 

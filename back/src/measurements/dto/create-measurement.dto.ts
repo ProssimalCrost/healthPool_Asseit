@@ -22,6 +22,17 @@ export class ReadingInputDto {
   value: number;
 }
 
+export class ProductUseInputDto {
+  @IsUUID()
+  productId: string;
+
+  /** Quantidade aplicada, na unidade do produto. Sai do estoque. */
+  @IsNumber()
+  @Min(0.001)
+  @Max(1_000_000)
+  quantity: number;
+}
+
 /** Uma ida ao tanque: vários parâmetros medidos no mesmo momento. */
 export class CreateMeasurementDto {
   @IsUUID()
@@ -38,4 +49,12 @@ export class CreateMeasurementDto {
   @ValidateNested({ each: true })
   @Type(() => ReadingInputDto)
   readings: ReadingInputDto[];
+
+  /** Produtos aplicados na piscina nesta ida, registrados com a mesma data da medição. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @ValidateNested({ each: true })
+  @Type(() => ProductUseInputDto)
+  products?: ProductUseInputDto[];
 }

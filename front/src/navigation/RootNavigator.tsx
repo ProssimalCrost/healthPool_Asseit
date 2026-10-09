@@ -9,6 +9,8 @@ import { MeasurementFormScreen } from '../screens/MeasurementFormScreen';
 import { ParameterFormScreen } from '../screens/ParameterFormScreen';
 import { PoolDetailScreen } from '../screens/PoolDetailScreen';
 import { PoolFormScreen } from '../screens/PoolFormScreen';
+import { ProductFormScreen } from '../screens/ProductFormScreen';
+import { ProductsScreen } from '../screens/ProductsScreen';
 import { palette } from '../theme/palette';
 import type { AppStackParamList } from './types';
 
@@ -48,6 +50,12 @@ export function RootNavigator() {
       />
       <AppStack.Screen name="MeasurementForm" component={MeasurementFormScreen} options={{ title: 'Registrar medição' }} />
       <AppStack.Screen name="History" component={HistoryScreen} options={{ title: 'Histórico' }} />
+      <AppStack.Screen name="Products" component={ProductsScreen} options={{ title: 'Estoque de produtos' }} />
+      <AppStack.Screen
+        name="ProductForm"
+        component={ProductFormScreen}
+        options={({ route }) => ({ title: route.params?.productId ? 'Editar produto' : 'Novo produto' })}
+      />
       <AppStack.Screen
         name="ParameterForm"
         component={ParameterFormScreen}

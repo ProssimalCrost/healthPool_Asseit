@@ -38,13 +38,44 @@ export class MeasurementsService {
     });
     const rangeById = new Map(definitions.map((d) => [d.id, d]));
 
-    const created = await this.prisma.measurement.createManyAndReturn({
-      data: dto.readings.map((reading) => ({
-        poolId: pool.id,
-        parameterId: reading.parameterId,
-        value: reading.value,
-        measuredAt,
-      })),
+    const uses = dto.products ?? [];
+    const productIds = uses.map((use) => use.productId);
+    if (new Set(productIds).size !== productIds.length) {
+      throw new BadRequestException('Cada produto só pode aparecer uma vez por medição.');
+    }
+    const products = await this.prisma.product.findMany({ where: { id: { in: productIds } } });
+    if (products.length !== productIds.length) {
+      throw new BadRequestException('Um ou mais produtos não existem no estoque.');
+    }
+    const productById = new Map(products.map((product) => [product.id, product]));
+
+    const created = await this.prisma.$transaction(async (tx) => {
+      const rows = await tx.measurement.createManyAndReturn({
+        data: dto.readings.map((reading) => ({
+          poolId: pool.id,
+          parameterId: reading.parameterId,
+          value: reading.value,
+          measuredAt,
+        })),
+      });
+
+      for (const use of uses) {
+        const product = productById.get(use.productId);
+        if (!product) continue;
+        await tx.productUsage.create({
+          data: {
+            poolId: pool.id,
+            productId: product.id,
+            productName: product.name,
+            unit: product.unit,
+            quantity: use.quantity,
+            usedAt: measuredAt,
+          },
+        });
+        // A contagem do estoque pode estar defasada: nunca deixa ficar negativa.
+        await tx.$executeRaw`UPDATE "products" SET "quantity" = GREATEST("quantity" - ${use.quantity}, 0), "updated_at" = NOW() WHERE "id" = ${product.id}`;
+      }
+      return rows;
     });
 
     return created.map((row) =>

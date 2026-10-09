@@ -22,8 +22,9 @@ model Pool {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  parameters   PoolParameter[]
-  measurements Measurement[]
+  parameters    PoolParameter[]
+  measurements  Measurement[]
+  productUsages ProductUsage[]
 
   @@map("pools")
 }
@@ -74,4 +75,41 @@ model Measurement {
 
   @@index([poolId, parameterId, measuredAt(sort: Desc)])
   @@map("measurements")
+}
+
+/// Produto em estoque (cloro, algicida, barrilha...).
+/// alertThreshold definido pelo usuário: quando quantity <= alertThreshold, o app avisa para repor.
+/// alertThreshold nulo = sem alerta para este produto.
+model Product {
+  id             String   @id @default(uuid())
+  name           String   @unique
+  unit           String   @default("un")
+  quantity       Float    @default(0)
+  alertThreshold Float?   @map("alert_threshold")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  usages ProductUsage[]
+
+  @@map("products")
+}
+
+/// Produto aplicado em uma piscina, com a data de uso.
+/// productName guarda o nome na hora do uso, para o histórico continuar legível
+/// mesmo se o produto for apagado do estoque (productId vira nulo).
+model ProductUsage {
+  id          String   @id @default(uuid())
+  poolId      String   @map("pool_id")
+  pool        Pool     @relation(fields: [poolId], references: [id], onDelete: Cascade)
+  productId   String?  @map("product_id")
+  product     Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productName String   @map("product_name")
+  unit        String   @default("un")
+  quantity    Float
+  usedAt      DateTime @map("used_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([poolId, usedAt(sort: Desc)])
+  @@index([productId])
+  @@map("product_usages")
 }

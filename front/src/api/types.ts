@@ -64,6 +64,46 @@ export interface ReadingInput {
   value: number;
 }
 
+export interface Product {
+  id: string;
+  name: string;
+  unit: string;
+  quantity: number;
+  /** Avisa para repor quando quantity <= alertThreshold. Nulo = sem alerta. */
+  alertThreshold: number | null;
+  lowStock: boolean;
+  createdAt: IsoDate;
+  updatedAt: IsoDate;
+}
+
+export interface ProductInput {
+  name?: string;
+  unit?: string;
+  quantity?: number;
+  alertThreshold?: number | null;
+}
+
+/** Produto aplicado em uma piscina, na data da medição. */
+export interface ProductUsage {
+  id: string;
+  poolId: string;
+  productId: string | null;
+  productName: string;
+  unit: string;
+  quantity: number;
+  usedAt: IsoDate;
+}
+
+export interface ProductUsagePage {
+  items: ProductUsage[];
+  pagination: Pagination;
+}
+
+export interface ProductUseInput {
+  productId: string;
+  quantity: number;
+}
+
 export interface PoolInput {
   name: string;
   volumeLiters?: number | null;

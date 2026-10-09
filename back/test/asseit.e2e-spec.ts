@@ -25,6 +25,7 @@ describe('healthPool Asseit (e2e)', () => {
   let http: ReturnType<typeof request>;
   const poolIds: string[] = [];
   const parameterIds: string[] = [];
+  const productIds: string[] = [];
   const tag = crypto.randomUUID().slice(0, 8);
 
   const key = { 'x-access-key': KEY };
@@ -63,6 +64,7 @@ describe('healthPool Asseit (e2e)', () => {
   afterAll(async () => {
     await prisma.pool.deleteMany({ where: { id: { in: poolIds } } });
     await prisma.parameterDefinition.deleteMany({ where: { id: { in: parameterIds } } });
+    await prisma.product.deleteMany({ where: { id: { in: productIds } } });
     await app.close();
   });
 
@@ -269,6 +271,54 @@ describe('healthPool Asseit (e2e)', () => {
       expect(detail.body.parameters.map((p: { name: string }) => p.name)).toEqual(['pH']);
       const history = await http.get('/api/measurements').query({ poolId: pool.id }).set(key).expect(200);
       expect(history.body.items).toHaveLength(1);
+    });
+  });
+  describe('estoque de produtos', () => {
+    async function createProduct(body: Record<string, unknown>) {
+      const response = await http.post('/api/products').set(key).send(body).expect(201);
+      productIds.push(response.body.id);
+      return response.body as { id: string; quantity: number; lowStock: boolean };
+    }
+
+    it('cria produto e marca lowStock quando quantidade <= alerta', async () => {
+      const ok = await createProduct({ name: name('Cloro'), unit: 'kg', quantity: 10, alertThreshold: 3 });
+      expect(ok.lowStock).toBe(false);
+      const low = await http.patch(`/api/products/${ok.id}`).set(key).send({ quantity: 3 }).expect(200);
+      expect(low.body.lowStock).toBe(true);
+      const off = await http.patch(`/api/products/${ok.id}`).set(key).send({ alertThreshold: null }).expect(200);
+      expect(off.body.lowStock).toBe(false);
+      await http.post('/api/products').set(key).send({ name: name('Cloro'), quantity: 1 }).expect(409);
+    });
+
+    it('medição com produtos baixa o estoque (sem ficar negativo) e grava o uso com a data', async () => {
+      const ph = await systemParam('ph');
+      const pool = await createPool({ parameterIds: [ph] });
+      const product = await createProduct({ name: name('Barrilha'), unit: 'kg', quantity: 2, alertThreshold: 1 });
+      const measuredAt = new Date(Date.now() - 3600_000).toISOString();
+
+      await http.post('/api/measurements').set(key)
+        .send({ poolId: pool.id, measuredAt, readings: [{ parameterId: ph, value: 7.5 }], products: [{ productId: product.id, quantity: 5 }] })
+        .expect(201);
+
+      const list = await http.get('/api/products').set(key).expect(200);
+      expect(list.body.find((p: { id: string }) => p.id === product.id)).toMatchObject({ quantity: 0, lowStock: true });
+      const usages = await http.get('/api/product-usages').query({ poolId: pool.id }).set(key).expect(200);
+      expect(usages.body.items).toHaveLength(1);
+      expect(usages.body.items[0]).toMatchObject({ productName: name('Barrilha'), quantity: 5, usedAt: measuredAt });
+
+      await http.delete(`/api/products/${product.id}`).set(key).expect(204);
+      const after = await http.get('/api/product-usages').query({ poolId: pool.id }).set(key).expect(200);
+      expect(after.body.items[0]).toMatchObject({ productId: null, productName: name('Barrilha') });
+    });
+
+    it('recusa produto inexistente ou repetido na medição', async () => {
+      const ph = await systemParam('ph');
+      const pool = await createPool({ parameterIds: [ph] });
+      const product = await createProduct({ name: name('Algicida'), quantity: 4 });
+      const readings = [{ parameterId: ph, value: 7.5 }];
+      await http.post('/api/measurements').set(key).send({ poolId: pool.id, readings, products: [{ productId: crypto.randomUUID(), quantity: 1 }] }).expect(400);
+      const dup = { productId: product.id, quantity: 1 };
+      await http.post('/api/measurements').set(key).send({ poolId: pool.id, readings, products: [dup, dup] }).expect(400);
     });
   });
 });

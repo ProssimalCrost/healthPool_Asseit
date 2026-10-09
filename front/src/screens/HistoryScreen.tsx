@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';
 import { deleteMeasurement, listMeasurements } from '../api/measurements';
+import { listProductUsages } from '../api/products';
 import { queryKeys } from '../api/queryKeys';
 import type { Measurement } from '../api/types';
 import { Card } from '../components/Card';
@@ -55,6 +56,11 @@ export function HistoryScreen({ route }: Props) {
       });
       return { items: page.items, from, to, truncated: page.pagination.hasMore };
     },
+  });
+
+  const usages = useQuery({
+    queryKey: queryKeys.productUsages(poolId),
+    queryFn: () => listProductUsages(poolId),
   });
 
   const remove = useMutation({
@@ -194,6 +200,30 @@ export function HistoryScreen({ route }: Props) {
           </View>
         </>
       )}
+
+      <View className="gap-2">
+        <Text variant="heading">Produtos usados</Text>
+        {usages.isPending ? (
+          <ActivityIndicator color={palette.water} accessibilityLabel="Carregando os produtos usados" />
+        ) : usages.error ? (
+          <ErrorBanner message={getErrorMessage(usages.error)} onRetry={() => void usages.refetch()} />
+        ) : (usages.data?.items.length ?? 0) === 0 ? (
+          <Text variant="small">Nenhum produto registrado nesta piscina ainda.</Text>
+        ) : (
+          usages.data?.items.map((usage) => (
+            <View
+              key={usage.id}
+              className="flex-row items-center justify-between gap-3 rounded-md border border-border bg-surface p-3.5"
+            >
+              <View className="flex-1 gap-0.5">
+                <Text variant="label">{usage.productName}</Text>
+                <Text variant="small">{formatDateTime(usage.usedAt)}</Text>
+              </View>
+              <Text variant="heading">{formatValue(usage.quantity, usage.unit)}</Text>
+            </View>
+          ))
+        )}
+      </View>
     </Screen>
   );
 }

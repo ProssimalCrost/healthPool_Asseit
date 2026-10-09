@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { listParameters } from '../api/parameters';
 import { getPool, listPools } from '../api/pools';
+import { listProducts } from '../api/products';
 import { queryKeys } from '../api/queryKeys';
 
 export function usePools() {
@@ -13,6 +14,10 @@ export function usePool(poolId: string | undefined) {
     queryFn: () => getPool(poolId as string),
     enabled: poolId !== undefined,
   });
+}
+
+export function useProducts() {
+  return useQuery({ queryKey: queryKeys.products, queryFn: listProducts });
 }
 
 export function useParameters() {

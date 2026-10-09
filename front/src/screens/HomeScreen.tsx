@@ -13,7 +13,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { useAccess } from '../access/AccessContext';
-import { usePools } from '../hooks/useWater';
+import { usePools, useProducts } from '../hooks/useWater';
 import type { Pool } from '../api/types';
 import type { AppStackParamList } from '../navigation/types';
 import { palette } from '../theme/palette';
@@ -31,12 +31,15 @@ export function HomeScreen({ navigation: navProp }: HomeScreenProps = {}) {
 
   const { lock } = useAccess();
   const { data: pools = [], isPending, error, refetch, isRefetching } = usePools();
+  const { data: products = [], refetch: refetchProducts } = useProducts();
+  const lowCount = products.filter((product) => product.lowStock).length;
 
   // Recarrega a lista sempre que a tela voltar a ficar em foco
   useFocusEffect(
     useCallback(() => {
       void refetch();
-    }, [refetch])
+      void refetchProducts();
+    }, [refetch, refetchProducts])
   );
 
   const goToAddPool = () => navigation.navigate('PoolForm');
@@ -106,6 +109,20 @@ export function HomeScreen({ navigation: navProp }: HomeScreenProps = {}) {
         </View>
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel={lowCount > 0 ? `Estoque de produtos, ${lowCount} para repor` : 'Estoque de produtos'}
+          onPress={() => navigation.navigate('Products')}
+          hitSlop={8}
+          className="w-11 h-11 items-center justify-center rounded-full active:opacity-75"
+        >
+          <Ionicons name="flask-outline" size={22} color={lowCount > 0 ? palette.alert : palette.inkMuted} />
+          {lowCount > 0 ? (
+            <View className="absolute right-0 top-0 min-w-[18px] h-[18px] items-center justify-center rounded-full bg-alert px-1">
+              <Text className="text-[11px] font-bold text-on-accent">{lowCount}</Text>
+            </View>
+          ) : null}
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
           accessibilityLabel="Trocar código de acesso"
           onPress={confirmChangeKey}
           hitSlop={8}
@@ -122,6 +139,19 @@ export function HomeScreen({ navigation: navProp }: HomeScreenProps = {}) {
             <Text className="text-sm font-semibold text-alert">Tentar novamente</Text>
           </Pressable>
         </View>
+      ) : null}
+
+      {lowCount > 0 ? (
+        <Pressable
+          onPress={() => navigation.navigate('Products')}
+          accessibilityRole="alert"
+          className="mx-5 mt-2 p-3 gap-0.5 rounded-xl bg-alert-soft active:opacity-85"
+        >
+          <Text className="text-sm font-semibold text-alert">
+            {lowCount === 1 ? '1 produto precisa de reposição' : `${lowCount} produtos precisam de reposição`}
+          </Text>
+          <Text className="text-[13px] text-alert">Toque para ver o estoque</Text>
+        </Pressable>
       ) : null}
 
       {firstLoad ? (
